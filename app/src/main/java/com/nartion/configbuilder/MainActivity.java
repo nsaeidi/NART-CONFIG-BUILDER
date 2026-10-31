@@ -8,15 +8,25 @@ import android.graphics.drawable.GradientDrawable;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
+
 import org.json.JSONArray;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends Activity {
+
+    private static final int PICK_FILE = 1001;
 
     private LinearLayout listLayout;
     private TextView countText;
@@ -41,7 +51,6 @@ public class MainActivity extends Activity {
         loadConfigs();
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -98,6 +107,11 @@ public class MainActivity extends Activity {
         root.addView(clearInput);
         clearInput.setOnClickListener(v -> input.setText(""));
 
+        Button fileButton = button(
+                "📁 انتخاب فایل TXT و ورود گروهی", navy);
+        add(root, fileButton, 0, 12, 0, 8);
+        fileButton.setOnClickListener(v -> openFilePicker());
+
         TextView listTitle = text(
                 "فهرست کانفیگ‌ها", 19, navy, true);
         add(root, listTitle, 0, 28, 0, 12);
@@ -107,13 +121,108 @@ public class MainActivity extends Activity {
         root.addView(listLayout);
 
         TextView footer = text(
-                "NART CONFIG BUILDER • Version 3.0",
+                "NART CONFIG BUILDER • Version 4.0",
                 11, Color.GRAY, false);
         footer.setGravity(Gravity.CENTER);
         add(root, footer, 0, 30, 0, 10);
 
         setContentView(scroll);
         refreshList();
+    }
+
+    private void openFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+
+        try {
+            startActivityForResult(intent, PICK_FILE);
+        } catch (Exception e) {
+            Toast.makeText(this,
+                    "باز کردن فایل امکان‌پذیر نیست",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(
+            int requestCode, int resultCode, Intent data) {
+
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == PICK_FILE &&
+                resultCode == RESULT_OK &&
+                data != null &&
+                data.getData() != null) {
+
+            importTextFile(data.getData());
+        }
+    }
+
+    private void importTextFile(Uri uri) {
+        int added = 0;
+        int duplicate = 0;
+
+        try {
+            InputStream stream =
+                    getContentResolver().openInputStream(uri);
+
+            if (stream == null) {
+                throw new Exception("File unavailable");
+            }
+
+            ByteArrayOutputStream output =
+                    new ByteArrayOutputStream();
+
+            byte[] buffer = new byte[8192];
+            int length;
+
+            while ((length = stream.read(buffer)) != -1) {
+                output.write(buffer, 0, length);
+            }
+
+            stream.close();
+
+            String content = new String(
+                    output.toByteArray(),
+                    StandardCharsets.UTF_8);
+
+            Pattern pattern = Pattern.compile(
+                    "(?i)(vless|vmess|trojan|ss)://[^\\s\"'<>]+");
+
+            Matcher matcher = pattern.matcher(content);
+
+            while (matcher.find()) {
+                String config = matcher.group().trim();
+
+                config = config.replaceAll("[,.)}\\]]+$", "");
+
+                if (!isValid(config)) continue;
+
+                if (unique.contains(config)) {
+                    duplicate++;
+                    continue;
+                }
+
+                unique.add(config);
+                configs.add(config);
+                added++;
+            }
+
+            saveConfigs();
+            refreshList();
+
+            Toast.makeText(this,
+                    "ورود فایل انجام شد\n" +
+                    "جدید: " + added +
+                    " | تکراری: " + duplicate,
+                    Toast.LENGTH_LONG).show();
+
+        } catch (Exception e) {
+            Toast.makeText(this,
+                    "خطا در خواندن فایل: " + e.getMessage(),
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void loadConfigs() {
@@ -227,7 +336,7 @@ public class MainActivity extends Activity {
         if (configs.isEmpty()) {
             TextView empty = text(
                     "هنوز کانفیگی اضافه نشده است.\n" +
-                    "لینک خود را در کادر بالا وارد کنید.",
+                    "لینک خود را وارد یا فایل TXT را انتخاب کنید.",
                     14, Color.GRAY, false);
 
             empty.setGravity(Gravity.CENTER);
