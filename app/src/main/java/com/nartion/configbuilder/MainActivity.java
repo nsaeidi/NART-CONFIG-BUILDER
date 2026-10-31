@@ -1,6 +1,7 @@
 package com.nartion.configbuilder;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -14,13 +15,18 @@ import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
+import android.text.Editable;
+import android.text.TextWatcher;
 
 import org.json.JSONArray;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,11 +37,18 @@ public class MainActivity extends Activity {
     private LinearLayout listLayout;
     private TextView countText;
     private EditText input;
+    private EditText searchInput;
+    private Spinner filterSpinner;
+    private Spinner sortSpinner;
+    private CheckBox selectAllBox;
+    private Button deleteSelectedButton;
 
     private ArrayList<String> configs = new ArrayList<>();
     private HashSet<String> unique = new HashSet<>();
+    private HashSet<String> selected = new HashSet<>();
 
     private SharedPreferences preferences;
+    private boolean updatingSelectAll = false;
 
     private int navy = Color.rgb(20, 40, 80);
     private int blue = Color.rgb(38, 105, 190);
@@ -59,7 +72,8 @@ public class MainActivity extends Activity {
 
         scroll.addView(root);
 
-        TextView title = text("NART CONFIG BUILDER", 23, navy, true);
+        TextView title = text(
+                "NART CONFIG BUILDER", 23, navy, true);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
 
@@ -74,9 +88,7 @@ public class MainActivity extends Activity {
         stats.setPadding(dp(15), dp(18), dp(15), dp(18));
         stats.setBackground(round(navy, 18));
 
-        countText = text(
-                "تعداد کانفیگ‌ها: " + configs.size(),
-                19, Color.WHITE, true);
+        countText = text("", 17, Color.WHITE, true);
         countText.setGravity(Gravity.CENTER);
         stats.addView(countText);
         root.addView(stats);
@@ -113,20 +125,130 @@ public class MainActivity extends Activity {
         fileButton.setOnClickListener(v -> openFilePicker());
 
         TextView listTitle = text(
-                "فهرست کانفیگ‌ها", 19, navy, true);
-        add(root, listTitle, 0, 28, 0, 12);
+                "جست‌وجو و مدیریت کانفیگ‌ها", 19, navy, true);
+        add(root, listTitle, 0, 28, 0, 10);
+
+        searchInput = new EditText(this);
+        searchInput.setSingleLine(true);
+        searchInput.setTextSize(14);
+        searchInput.setHint("جست‌وجو در لینک‌ها یا نوع کانفیگ...");
+        searchInput.setPadding(dp(12), dp(10), dp(12), dp(10));
+        searchInput.setBackground(round(Color.WHITE, 12));
+        root.addView(searchInput, new LinearLayout.LayoutParams(
+                -1, dp(50)));
+
+        TextView filterLabel = text(
+                "فیلتر نوع کانفیگ", 14, navy, true);
+        add(root, filterLabel, 0, 14, 0, 4);
+
+        filterSpinner = new Spinner(this);
+        String[] filters = {
+                "همه کانفیگ‌ها",
+                "VLESS",
+                "VMess",
+                "TROJAN",
+                "SHADOWSOCKS"
+        };
+        filterSpinner.setAdapter(new ArrayAdapter<String>(
+                this, android.R.layout.simple_spinner_dropdown_item,
+                filters));
+        root.addView(filterSpinner);
+
+        TextView sortLabel = text(
+                "مرتب‌سازی", 14, navy, true);
+        add(root, sortLabel, 0, 12, 0, 4);
+
+        sortSpinner = new Spinner(this);
+        String[] sorts = {
+                "جدیدترین",
+                "قدیمی‌ترین",
+                "بر اساس نوع"
+        };
+        sortSpinner.setAdapter(new ArrayAdapter<String>(
+                this, android.R.layout.simple_spinner_dropdown_item,
+                sorts));
+        root.addView(sortSpinner);
+
+        selectAllBox = new CheckBox(this);
+        selectAllBox.setText("انتخاب همه موارد نمایش‌داده‌شده");
+        selectAllBox.setTextColor(navy);
+        add(root, selectAllBox, 0, 12, 0, 4);
+
+        deleteSelectedButton = button(
+                "حذف کانفیگ‌های انتخاب‌شده", Color.rgb(190, 55, 55));
+        root.addView(deleteSelectedButton);
+        deleteSelectedButton.setEnabled(false);
+        deleteSelectedButton.setAlpha(0.5f);
+        deleteSelectedButton.setOnClickListener(
+                v -> confirmDeleteSelected());
 
         listLayout = new LinearLayout(this);
         listLayout.setOrientation(LinearLayout.VERTICAL);
-        root.addView(listLayout);
+        add(root, listLayout, 0, 15, 0, 0);
 
         TextView footer = text(
-                "NART CONFIG BUILDER • Version 4.0",
+                "NART CONFIG BUILDER • Version 5.0",
                 11, Color.GRAY, false);
         footer.setGravity(Gravity.CENTER);
         add(root, footer, 0, 30, 0, 10);
 
         setContentView(scroll);
+
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(
+                    CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(
+                    CharSequence s, int start, int before, int count) {
+                refreshList();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
+        filterSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(
+                    AdapterView<?> parent, View view,
+                    int position, long id) {
+                refreshList();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        sortSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(
+                    AdapterView<?> parent, View view,
+                    int position, long id) {
+                refreshList();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        selectAllBox.setOnClickListener(v -> {
+            if (updatingSelectAll) return;
+
+            ArrayList<String> visible = getVisibleConfigs();
+
+            if (selectAllBox.isChecked()) {
+                selected.addAll(visible);
+            } else {
+                selected.removeAll(visible);
+            }
+
+            refreshList();
+        });
+
         refreshList();
     }
 
@@ -154,7 +276,6 @@ public class MainActivity extends Activity {
                 resultCode == RESULT_OK &&
                 data != null &&
                 data.getData() != null) {
-
             importTextFile(data.getData());
         }
     }
@@ -194,7 +315,6 @@ public class MainActivity extends Activity {
 
             while (matcher.find()) {
                 String config = matcher.group().trim();
-
                 config = config.replaceAll("[,.)}\\]]+$", "");
 
                 if (!isValid(config)) continue;
@@ -213,8 +333,7 @@ public class MainActivity extends Activity {
             refreshList();
 
             Toast.makeText(this,
-                    "ورود فایل انجام شد\n" +
-                    "جدید: " + added +
+                    "ورود فایل انجام شد\nجدید: " + added +
                     " | تکراری: " + duplicate,
                     Toast.LENGTH_LONG).show();
 
@@ -241,7 +360,6 @@ public class MainActivity extends Activity {
                     configs.add(config);
                 }
             }
-
         } catch (Exception e) {
             configs.clear();
             unique.clear();
@@ -308,16 +426,18 @@ public class MainActivity extends Activity {
     }
 
     private boolean isValid(String s) {
-        String lower = s.toLowerCase();
+        if (s == null) return false;
+
+        String lower = s.toLowerCase(Locale.ROOT);
 
         return lower.startsWith("vless://") ||
-               lower.startsWith("vmess://") ||
-               lower.startsWith("trojan://") ||
-               lower.startsWith("ss://");
+                lower.startsWith("vmess://") ||
+                lower.startsWith("trojan://") ||
+                lower.startsWith("ss://");
     }
 
     private String getType(String s) {
-        String lower = s.toLowerCase();
+        String lower = s.toLowerCase(Locale.ROOT);
 
         if (lower.startsWith("vless://")) return "VLESS";
         if (lower.startsWith("vmess://")) return "VMess";
@@ -327,16 +447,81 @@ public class MainActivity extends Activity {
         return "UNKNOWN";
     }
 
+    private ArrayList<String> getVisibleConfigs() {
+        ArrayList<String> result = new ArrayList<>();
+
+        String query = searchInput == null ? "" :
+                searchInput.getText().toString()
+                        .trim().toLowerCase(Locale.ROOT);
+
+        String filter = filterSpinner == null ? "همه کانفیگ‌ها" :
+                filterSpinner.getSelectedItem().toString();
+
+        for (String config : configs) {
+            String type = getType(config);
+
+            if (!filter.equals("همه کانفیگ‌ها") &&
+                    !type.equalsIgnoreCase(filter)) {
+                continue;
+            }
+
+            if (!query.isEmpty() &&
+                    !config.toLowerCase(Locale.ROOT).contains(query) &&
+                    !type.toLowerCase(Locale.ROOT).contains(query)) {
+                continue;
+            }
+
+            result.add(config);
+        }
+
+        int sortPosition = sortSpinner == null ? 0 :
+                sortSpinner.getSelectedItemPosition();
+
+        if (sortPosition == 1) {
+            Collections.reverse(result);
+        } else if (sortPosition == 2) {
+            Collections.sort(result, new Comparator<String>() {
+                @Override
+                public int compare(String a, String b) {
+                    return getType(a).compareToIgnoreCase(getType(b));
+                }
+            });
+        }
+
+        return result;
+    }
+
     private void refreshList() {
+        if (listLayout == null) return;
+
         listLayout.removeAllViews();
 
-        countText.setText(
-                "تعداد کانفیگ‌ها: " + configs.size());
+        ArrayList<String> visible = getVisibleConfigs();
 
-        if (configs.isEmpty()) {
+        countText.setText(
+                "کل کانفیگ‌ها: " + configs.size() +
+                "  |  نمایش: " + visible.size() +
+                "  |  انتخاب‌شده: " + selected.size());
+
+        deleteSelectedButton.setEnabled(!selected.isEmpty());
+        deleteSelectedButton.setAlpha(
+                selected.isEmpty() ? 0.5f : 1f);
+
+        updatingSelectAll = true;
+
+        boolean allSelected = !visible.isEmpty() &&
+                selected.containsAll(visible);
+
+        selectAllBox.setChecked(allSelected);
+        selectAllBox.setEnabled(!visible.isEmpty());
+
+        updatingSelectAll = false;
+
+        if (visible.isEmpty()) {
             TextView empty = text(
-                    "هنوز کانفیگی اضافه نشده است.\n" +
-                    "لینک خود را وارد یا فایل TXT را انتخاب کنید.",
+                    configs.isEmpty()
+                    ? "هنوز کانفیگی اضافه نشده است."
+                    : "موردی با این جست‌وجو یا فیلتر پیدا نشد.",
                     14, Color.GRAY, false);
 
             empty.setGravity(Gravity.CENTER);
@@ -345,13 +530,13 @@ public class MainActivity extends Activity {
             return;
         }
 
-        for (int i = 0; i < configs.size(); i++) {
-            final String config = configs.get(i);
+        for (int i = 0; i < visible.size(); i++) {
+            final String config = visible.get(i);
 
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(
-                    dp(14), dp(14), dp(14), dp(14));
+                    dp(14), dp(12), dp(14), dp(14));
             card.setBackground(round(Color.WHITE, 14));
 
             LinearLayout.LayoutParams cardParams =
@@ -360,22 +545,41 @@ public class MainActivity extends Activity {
             cardParams.setMargins(0, 0, 0, dp(12));
             listLayout.addView(card, cardParams);
 
+            LinearLayout heading = new LinearLayout(this);
+            heading.setOrientation(LinearLayout.HORIZONTAL);
+            heading.setGravity(Gravity.CENTER_VERTICAL);
+
+            CheckBox check = new CheckBox(this);
+            check.setChecked(selected.contains(config));
+            heading.addView(check);
+
             TextView name = text(
                     "کانفیگ " + (i + 1) +
                     " • " + getType(config),
-                    16, navy, true);
+                    15, navy, true);
 
-            card.addView(name);
+            heading.addView(name, new LinearLayout.LayoutParams(
+                    0, -2, 1));
+
+            card.addView(heading);
+
+            check.setOnCheckedChangeListener((button, checked) -> {
+                if (checked) {
+                    selected.add(config);
+                } else {
+                    selected.remove(config);
+                }
+                refreshList();
+            });
 
             TextView preview = text(
                     config, 12, Color.DKGRAY, false);
 
             preview.setMaxLines(2);
-            preview.setTextDirection(
-                    View.TEXT_DIRECTION_LTR);
+            preview.setTextDirection(View.TEXT_DIRECTION_LTR);
             preview.setGravity(Gravity.LEFT);
 
-            add(card, preview, 0, 8, 0, 10);
+            add(card, preview, 0, 6, 0, 10);
 
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -385,15 +589,13 @@ public class MainActivity extends Activity {
                     "حذف", Color.rgb(190, 55, 55));
 
             LinearLayout.LayoutParams p =
-                    new LinearLayout.LayoutParams(
-                            0, dp(43), 1);
+                    new LinearLayout.LayoutParams(0, dp(43), 1);
 
             p.setMargins(0, 0, dp(6), 0);
             actions.addView(copy, p);
 
             LinearLayout.LayoutParams p2 =
-                    new LinearLayout.LayoutParams(
-                            0, dp(43), 1);
+                    new LinearLayout.LayoutParams(0, dp(43), 1);
 
             p2.setMargins(dp(6), 0, 0, 0);
             actions.addView(delete, p2);
@@ -406,8 +608,7 @@ public class MainActivity extends Activity {
                                 Context.CLIPBOARD_SERVICE);
 
                 clipboard.setPrimaryClip(
-                        ClipData.newPlainText(
-                                "VPN Config", config));
+                        ClipData.newPlainText("VPN Config", config));
 
                 Toast.makeText(this,
                         "کانفیگ کپی شد",
@@ -417,6 +618,7 @@ public class MainActivity extends Activity {
             delete.setOnClickListener(v -> {
                 unique.remove(config);
                 configs.remove(config);
+                selected.remove(config);
 
                 saveConfigs();
                 refreshList();
@@ -426,6 +628,44 @@ public class MainActivity extends Activity {
                         Toast.LENGTH_SHORT).show();
             });
         }
+    }
+
+    private void confirmDeleteSelected() {
+        if (selected.isEmpty()) {
+            Toast.makeText(this,
+                    "ابتدا کانفیگ‌ها را انتخاب کن",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("حذف گروهی")
+                .setMessage(
+                        "آیا از حذف " + selected.size() +
+                        " کانفیگ انتخاب‌شده مطمئن هستی؟")
+                .setNegativeButton("انصراف", (dialog, which) -> {
+                    dialog.dismiss();
+                })
+                .setPositiveButton("حذف", (dialog, which) -> {
+                    int removed = 0;
+
+                    for (String config :
+                            new ArrayList<>(selected)) {
+                        if (configs.remove(config)) {
+                            unique.remove(config);
+                            removed++;
+                        }
+                    }
+
+                    selected.clear();
+                    saveConfigs();
+                    refreshList();
+
+                    Toast.makeText(this,
+                            removed + " کانفیگ حذف شد",
+                            Toast.LENGTH_LONG).show();
+                })
+                .show();
     }
 
     private TextView text(
