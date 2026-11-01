@@ -186,6 +186,25 @@ public class MainActivity extends Activity {
         listLayout.setOrientation(LinearLayout.VERTICAL);
         add(root, listLayout, 0, 15, 0, 0);
 
+        Button xrayTestButton = button("آزمایش هسته Xray", navy);
+        add(root, xrayTestButton, 0, 20, 0, 10);
+        xrayTestButton.setOnClickListener(v -> {
+            xrayTestButton.setEnabled(false);
+            xrayTestButton.setText("در حال آزمایش...");
+            new Thread(() -> {
+                String result = XrayTest.getVersion();
+                runOnUiThread(() -> {
+                    xrayTestButton.setEnabled(true);
+                    xrayTestButton.setText("آزمایش هسته Xray");
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("نتیجه آزمایش Xray")
+                        .setMessage(result)
+                        .setPositiveButton("باشه", null)
+                        .show();
+                });
+            }).start();
+        });
+
         TextView footer = text(
                 "NART CONFIG BUILDER • Version 5.0",
                 11, Color.GRAY, false);
