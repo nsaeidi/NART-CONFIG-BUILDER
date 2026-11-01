@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.net.VpnService;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
@@ -33,6 +34,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity {
 
     private static final int PICK_FILE = 1001;
+    private static final int VPN_PERMISSION = 1002;
 
     private LinearLayout listLayout;
     private TextView countText;
@@ -47,6 +49,7 @@ public class MainActivity extends Activity {
     private HashSet<String> unique = new HashSet<>();
     private HashSet<String> selected = new HashSet<>();
     private String activeConfig = null;
+    private String pendingConfig = null;
 
     private SharedPreferences preferences;
     private boolean updatingSelectAll = false;
@@ -206,6 +209,47 @@ public class MainActivity extends Activity {
             }).start();
         });
 
+        Button vlessTestButton = button("آزمایش تبدیل VLESS", blue);
+        add(root, vlessTestButton, 0, 8, 0, 10);
+
+        vlessTestButton.setOnClickListener(v -> {
+            String selectedVless = null;
+
+            for (String item : configs) {
+                if ("VLESS".equals(getType(item))) {
+                    selectedVless = item;
+                    break;
+                }
+            }
+
+            if (selectedVless == null) {
+                Toast.makeText(this,
+                        "هیچ کانفیگ VLESS ذخیره نشده است",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            final String testLink = selectedVless;
+            vlessTestButton.setEnabled(false);
+            vlessTestButton.setText("در حال تبدیل...");
+
+            new Thread(() -> {
+                String result =
+                        XrayTest.testVlessConversion(testLink);
+
+                runOnUiThread(() -> {
+                    vlessTestButton.setEnabled(true);
+                    vlessTestButton.setText("آزمایش تبدیل VLESS");
+
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("نتیجه آزمایش تبدیل")
+                            .setMessage(result)
+                            .setPositiveButton("باشه", null)
+                            .show();
+                });
+            }).start();
+        });
+
         TextView footer = text(
                 "NART CONFIG BUILDER • Version 5.0",
                 11, Color.GRAY, false);
@@ -291,6 +335,19 @@ public class MainActivity extends Activity {
             int requestCode, int resultCode, Intent data) {
 
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == VPN_PERMISSION) {
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(this,
+                        "مجوز VPN تأیید شد",
+                        Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this,
+                        "مجوز VPN رد شد",
+                        Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
 
         if (requestCode == PICK_FILE &&
                 resultCode == RESULT_OK &&
@@ -630,6 +687,18 @@ public class MainActivity extends Activity {
             actions.addView(delete, p2);
 
             card.addView(actions);
+
+            connect.setOnClickListener(v -> {
+                Intent vpnIntent = VpnService.prepare(this);
+
+                if (vpnIntent != null) {
+                    startActivityForResult(vpnIntent, VPN_PERMISSION);
+                } else {
+                    Toast.makeText(this,
+                            "مجوز VPN قبلاً تأیید شده است",
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
 
             copy.setOnClickListener(v -> {
                 ClipboardManager clipboard =

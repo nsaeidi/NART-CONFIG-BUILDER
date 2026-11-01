@@ -5,3 +5,7 @@ local.properties
 *.iml
 .idea/
 .DS_Store
+
+# Local Xray library and backups
+app/libs/
+*.backup
