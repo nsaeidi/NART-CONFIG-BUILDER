@@ -23,6 +23,17 @@ public class XrayController {
         }
     }
 
+
+    public static String convertShareLink(String shareLink) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("text", shareLink);
+            return invoke("convertShareLinksToXrayJson", payload);
+        } catch (Exception e) {
+            return error(e);
+        }
+    }
+
     public static String start(String xrayJson) {
         try {
             JSONObject payload = new JSONObject();

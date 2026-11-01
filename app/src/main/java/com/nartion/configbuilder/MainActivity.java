@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
     private ArrayList<String> configs = new ArrayList<>();
     private HashSet<String> unique = new HashSet<>();
     private HashSet<String> selected = new HashSet<>();
+    private String activeConfig = null;
 
     private SharedPreferences preferences;
     private boolean updatingSelectAll = false;
@@ -603,9 +604,18 @@ public class MainActivity extends Activity {
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
 
+            Button connect = button(
+                    config.equals(activeConfig) ? "قطع اتصال" : "اتصال",
+                    config.equals(activeConfig) ? Color.rgb(190, 55, 55) : Color.rgb(35, 145, 85));
+
             Button copy = button("کپی", blue);
             Button delete = button(
                     "حذف", Color.rgb(190, 55, 55));
+
+            LinearLayout.LayoutParams connectParams =
+                    new LinearLayout.LayoutParams(0, dp(43), 1);
+            connectParams.setMargins(0, 0, dp(6), 0);
+            actions.addView(connect, connectParams);
 
             LinearLayout.LayoutParams p =
                     new LinearLayout.LayoutParams(0, dp(43), 1);
