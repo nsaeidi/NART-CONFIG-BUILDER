@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity {
 
     private static final int PICK_FILE = 1001;
+    private static final int SAVE_JSON_FILE = 1003;
     private static final int VPN_PERMISSION = 1002;
 
     private LinearLayout listLayout;
@@ -244,6 +245,18 @@ public class MainActivity extends Activity {
                     new AlertDialog.Builder(MainActivity.this)
                             .setTitle("نتیجه آزمایش تبدیل")
                             .setMessage(result)
+                            .setNeutralButton("ذخیره JSON", (dialog, which) -> {
+                                if (result.contains("JSON خروجی:")) {
+                                    String json = result.substring(
+                                            result.indexOf("JSON خروجی:") + "JSON خروجی:".length()
+                                    ).trim();
+                                    saveJsonFile(json);
+                                } else {
+                                    Toast.makeText(MainActivity.this,
+                                            "JSON معتبری برای ذخیره وجود ندارد.",
+                                            Toast.LENGTH_SHORT).show();
+                                }
+                            })
                             .setPositiveButton("باشه", null)
                             .show();
                 });
@@ -354,6 +367,31 @@ public class MainActivity extends Activity {
                 data != null &&
                 data.getData() != null) {
             importTextFile(data.getData());
+        }
+
+        if (requestCode == SAVE_JSON_FILE &&
+                resultCode == RESULT_OK &&
+                data != null &&
+                data.getData() != null) {
+            try {
+                if (pendingJson == null) {
+                    throw new Exception("JSON برای ذخیره وجود ندارد.");
+                }
+                java.io.OutputStream stream =
+                        getContentResolver().openOutputStream(data.getData());
+                if (stream == null) {
+                    throw new Exception("فایل قابل نوشتن نیست.");
+                }
+                try (java.io.OutputStream out = stream) {
+                    out.write(pendingJson.getBytes(StandardCharsets.UTF_8));
+                }
+                pendingJson = null;
+                Toast.makeText(this, "فایل JSON ذخیره شد.",
+                        Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "خطای ذخیره: " + e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -813,6 +851,18 @@ public class MainActivity extends Activity {
                 dp(right), dp(bottom));
 
         parent.addView(child, p);
+    }
+
+    private String pendingJson;
+
+
+    private void saveJsonFile(String json) {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TITLE, "NART-VLESS-OUTBOUND.txt");
+        pendingJson = json;
+        startActivityForResult(intent, SAVE_JSON_FILE);
     }
 
     private int dp(int value) {
