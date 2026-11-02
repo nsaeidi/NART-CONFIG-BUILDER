@@ -1,0 +1,88 @@
+package com.nartion.configbuilder;
+
+import android.net.VpnService;
+import android.os.ParcelFileDescriptor;
+import android.content.Intent;
+import android.util.Log;
+import android.app.Notification;
+
+public class NartVpnService extends VpnService {
+
+    public static final String EXTRA_CONFIG = "com.nartion.configbuilder.EXTRA_CONFIG";
+    private static final String TAG = "NART_VPN";
+    private ParcelFileDescriptor vpnInterface;
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        try {
+            if (intent == null) {
+                Log.e(TAG, "Service intent is null");
+                stopSelf(startId);
+                return START_NOT_STICKY;
+            }
+
+            String shareLink = intent.getStringExtra(EXTRA_CONFIG);
+
+            if (shareLink == null || shareLink.trim().isEmpty()) {
+                Log.e(TAG, "VPN config is missing");
+                stopSelf(startId);
+                return START_NOT_STICKY;
+            }
+
+            Log.i(TAG, "VPN config received");
+
+            Builder builder = new Builder();
+            builder.setSession("NART VPN");
+            builder.addAddress("10.10.10.2", 32);
+            builder.addRoute("0.0.0.0", 0);
+            builder.addDnsServer("1.1.1.1");
+
+            vpnInterface = builder.establish();
+
+            if (vpnInterface == null) {
+                Log.e(TAG, "VPN interface creation failed");
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+
+            Log.i(TAG, "TUN interface created");
+
+            Notification notification =
+                VpnNotification.build(this);
+
+            startForeground(
+                VpnNotification.NOTIFICATION_ID,
+                notification
+            );
+
+            Log.i(TAG, "Foreground notification started");
+
+        } catch (Exception e) {
+            Log.e(TAG, "VPN service error", e);
+            closeVpnInterface();
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        return START_NOT_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        closeVpnInterface();
+        stopForeground(true);
+        Log.i(TAG, "VPN service destroyed");
+        super.onDestroy();
+    }
+
+    private void closeVpnInterface() {
+        if (vpnInterface != null) {
+            try {
+                vpnInterface.close();
+            } catch (Exception e) {
+                Log.e(TAG, "TUN close error", e);
+            }
+            vpnInterface = null;
+        }
+    }
+}
