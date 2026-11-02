@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: XTLS/libXray
+          ref: 93af542c72ffad0d9c9c7b9a6975eb6d2a5f2d92
           path: libXray
 
       - name: Set up Java
@@ -37,6 +38,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+
+      - name: Install required Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager --list_installed
 
       - name: Build libXray AAR
         run: |
