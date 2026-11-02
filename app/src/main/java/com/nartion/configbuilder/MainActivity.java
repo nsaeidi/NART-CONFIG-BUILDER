@@ -343,6 +343,30 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void startPendingVpnService() {
+        if (pendingConfig == null || pendingConfig.trim().isEmpty()) {
+            Toast.makeText(this, "کانفیگ انتخاب‌شده معتبر نیست",
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent serviceIntent = new Intent(this, NartVpnService.class);
+        serviceIntent.putExtra(NartVpnService.EXTRA_CONFIG, pendingConfig);
+
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
+            pendingConfig = null;
+        } catch (Exception e) {
+            Toast.makeText(this, "خطا در راه‌اندازی سرویس VPN",
+                Toast.LENGTH_LONG).show();
+            android.util.Log.e("NART_VPN", "Service start failed", e);
+        }
+    }
+
     @Override
     protected void onActivityResult(
             int requestCode, int resultCode, Intent data) {
@@ -351,13 +375,12 @@ public class MainActivity extends Activity {
 
         if (requestCode == VPN_PERMISSION) {
             if (resultCode == RESULT_OK) {
-                Toast.makeText(this,
-                        "مجوز VPN تأیید شد",
-                        Toast.LENGTH_SHORT).show();
+                startPendingVpnService();
             } else {
+                pendingConfig = null;
                 Toast.makeText(this,
-                        "مجوز VPN رد شد",
-                        Toast.LENGTH_SHORT).show();
+                    "مجوز VPN رد شد",
+                    Toast.LENGTH_SHORT).show();
             }
             return;
         }
@@ -456,6 +479,15 @@ public class MainActivity extends Activity {
             Toast.makeText(this,
                     "خطا در خواندن فایل: " + e.getMessage(),
                     Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (preferences != null) {
+            activeConfig = preferences.getString("active_config", null);
+            refreshList();
         }
     }
 
@@ -727,14 +759,22 @@ public class MainActivity extends Activity {
             card.addView(actions);
 
             connect.setOnClickListener(v -> {
+                if (config.equals(activeConfig)) {
+                    Intent stopIntent = new Intent(this, NartVpnService.class);
+                    stopIntent.setAction(NartVpnService.ACTION_DISCONNECT);
+                    startService(stopIntent);
+                    activeConfig = null;
+                    refreshList();
+                    return;
+                }
+
+                pendingConfig = config;
                 Intent vpnIntent = VpnService.prepare(this);
 
                 if (vpnIntent != null) {
                     startActivityForResult(vpnIntent, VPN_PERMISSION);
                 } else {
-                    Toast.makeText(this,
-                            "مجوز VPN قبلاً تأیید شده است",
-                            Toast.LENGTH_SHORT).show();
+                    startPendingVpnService();
                 }
             });
 
